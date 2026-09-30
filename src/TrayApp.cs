@@ -59,7 +59,7 @@ sealed class TrayApp : ApplicationContext
         bool on = dictation.IsRunning;
         tray.Icon = on ? active : idle;
         toggleItem.Text = on ? "Parar dictado" : "Iniciar dictado";
-        var dest = settings.Output == OutputMode.FocusedWindow ? "ventana con foco" : "fichero";
+        var dest = string.Join(" + ", new[] { settings.OutputToWindow ? "ventana" : null, settings.OutputToFile ? "fichero" : null }.Where(x => x != null));
         tray.Text = (on ? "Dictado ACTIVO" : "Dictado parado") + $" · {settings.Hotkey} · {dest}";
     }
 
@@ -91,8 +91,9 @@ sealed class TrayApp : ApplicationContext
 
     void OpenOutputFile()
     {
-        if (File.Exists(settings.FilePath))
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(settings.FilePath) { UseShellExecute = true });
+        var path = dictation.SessionFile ?? Settings.ResolvePath(settings.FilePath, DateTime.Now);
+        if (File.Exists(path))
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         else
             tray.ShowBalloonTip(3000, "Dictado por voz", "El fichero de salida todavía no existe.", ToolTipIcon.Info);
     }

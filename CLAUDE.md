@@ -14,4 +14,5 @@ App de bandeja de Windows (C# .NET 8 WinForms, NAudio.WinMM) para dictado con Wh
 ## Notas
 - Servidor Whisper del usuario: `http://127.0.0.1:8000` (faster-whisper-large-v3-turbo, app "Whisper del aula").
 - Compilar con `dotnet build -c Release` dentro de `src/` (el SDK está en `C:\Program Files\dotnet`; puede no estar en el PATH de la sesión).
+- Salida: `OutputToWindow` y `OutputToFile` son independientes (ambas posibles). `FilePath` es una plantilla; `Settings.ResolvePath` sustituye `{formato-fecha}` y `Dictation.Start` fija `SessionFile` (un fichero por sesión).
 - Mantener README.md y este fichero al día con cada cambio importante.

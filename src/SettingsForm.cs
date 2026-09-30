@@ -8,8 +8,9 @@ sealed class SettingsForm : Form
     readonly TextBox url = new(), model = new(), file = new(), hotkey = new();
     readonly ComboBox lang = new() { DropDownStyle = ComboBoxStyle.DropDown };
     readonly ComboBox mic = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    readonly RadioButton toFocus = new() { Text = "Escribir en la ventana con foco (donde está el cursor)", AutoSize = true };
-    readonly RadioButton toFile = new() { Text = "Guardar en un fichero de texto", AutoSize = true };
+    readonly CheckBox toFocus = new() { Text = "Escribir en la ventana con foco (donde está el cursor)", AutoSize = true };
+    readonly CheckBox toFile = new() { Text = "Guardar en un fichero de texto", AutoSize = true };
+    readonly Label preview = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(440, 0) };
     readonly CheckBox stamp = new() { Text = "Añadir fecha y hora a cada frase", AutoSize = true };
     readonly CheckBox autostart = new() { Text = "Iniciar con Windows", AutoSize = true };
     readonly NumericUpDown threshold = new() { Minimum = -70, Maximum = -10, DecimalPlaces = 0 };
@@ -59,7 +60,8 @@ sealed class SettingsForm : Form
         hotkey.KeyDown += CaptureHotkey;
         Row("Atajo iniciar/parar", hotkey);
         Wide(toFocus); Wide(toFile);
-        Row("Fichero de salida", file, browse);
+        Row("Fichero (plantilla)", file, browse);
+        Wide(preview);
         Wide(stamp);
         Row("Umbral de voz (dBFS)", threshold);
         Row("Silencio que corta frase (ms)", silence);
@@ -85,7 +87,8 @@ sealed class SettingsForm : Form
             try { status.Text = "Conectado. Modelos: " + await dictation.CheckServerAsync(url.Text); }
             catch (Exception ex) { status.Text = "Error: " + ex.Message; }
         };
-        toFocus.CheckedChanged += (_, _) => UpdateEnabled();
+        toFile.CheckedChanged += (_, _) => UpdateEnabled();
+        file.TextChanged += (_, _) => UpdatePreview();
         FormClosing += (_, e) => { if (DialogResult == DialogResult.OK && !Apply()) e.Cancel = true; };
 
         Load_();
@@ -97,7 +100,7 @@ sealed class SettingsForm : Form
         int i = mic.Items.IndexOf(s.MicrophoneName);
         mic.SelectedIndex = i >= 0 ? i : 0;
         hotkey.Text = s.Hotkey;
-        toFocus.Checked = s.Output == OutputMode.FocusedWindow; toFile.Checked = !toFocus.Checked;
+        toFocus.Checked = s.OutputToWindow; toFile.Checked = s.OutputToFile;
         file.Text = s.FilePath; stamp.Checked = s.TimestampInFile;
         threshold.Value = (decimal)Math.Clamp(s.ThresholdDb, -70, -10);
         silence.Value = Math.Clamp(s.SilenceMs, 300, 3000);
@@ -105,7 +108,15 @@ sealed class SettingsForm : Form
         UpdateEnabled();
     }
 
-    void UpdateEnabled() => file.Enabled = browse.Enabled = stamp.Enabled = toFile.Checked;
+    void UpdateEnabled()
+    {
+        file.Enabled = browse.Enabled = stamp.Enabled = toFile.Checked;
+        UpdatePreview();
+    }
+
+    void UpdatePreview() => preview.Text = toFile.Checked
+        ? "Marcadores de fecha entre llaves, p. ej. {yyyy-MM-dd} {HH-mm}. Ahora: " + Settings.ResolvePath(file.Text, DateTime.Now)
+        : "";
 
     void CaptureHotkey(object? sender, KeyEventArgs e)
     {
@@ -124,6 +135,11 @@ sealed class SettingsForm : Form
 
     bool Apply()
     {
+        if (!toFocus.Checked && !toFile.Checked)
+        {
+            MessageBox.Show(this, "Elige al menos un destino.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
         if (toFile.Checked && string.IsNullOrWhiteSpace(file.Text))
         {
             MessageBox.Show(this, "Indica un fichero de salida.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -132,7 +148,7 @@ sealed class SettingsForm : Form
         s.ServerUrl = url.Text.Trim(); s.ModelName = model.Text.Trim(); s.Language = lang.Text.Trim();
         s.MicrophoneName = mic.SelectedIndex > 0 ? (string)mic.SelectedItem! : "";
         s.Hotkey = hotkey.Text;
-        s.Output = toFocus.Checked ? OutputMode.FocusedWindow : OutputMode.TextFile;
+        s.OutputToWindow = toFocus.Checked; s.OutputToFile = toFile.Checked;
         s.FilePath = file.Text.Trim(); s.TimestampInFile = stamp.Checked;
         s.ThresholdDb = (double)threshold.Value; s.SilenceMs = (int)silence.Value;
         s.StartWithWindows = autostart.Checked;

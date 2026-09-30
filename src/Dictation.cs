@@ -27,6 +27,8 @@ sealed class Dictation : IDisposable
     bool speaking;
 
     public bool IsRunning => mic != null;
+    /// <summary>Fichero de la sesión actual (o de la última), calculado al iniciar el dictado.</summary>
+    public string? SessionFile { get; private set; }
     public event Action<string>? Error;
     public event Action<bool>? Speaking;
 
@@ -53,6 +55,7 @@ sealed class Dictation : IDisposable
             if (idx >= 0) device = idx;
         }
         ResetSegmenter();
+        SessionFile = Settings.ResolvePath(settings.FilePath, DateTime.Now);
         queue = Channel.CreateUnbounded<byte[]>();
         var reader = queue.Reader;
         worker = Task.Run(() => ProcessQueue(reader));
@@ -154,7 +157,7 @@ sealed class Dictation : IDisposable
                 var s = settings;
                 var text = await transcriber.TranscribeAsync(s, wav);
                 if (text.Length == 0) continue;
-                Output(s, text);
+                Output(s, SessionFile, text);
             }
             catch (Exception ex)
             {
@@ -164,17 +167,16 @@ sealed class Dictation : IDisposable
         }
     }
 
-    static void Output(Settings s, string text)
+    static void Output(Settings s, string? file, string text)
     {
-        if (s.Output == OutputMode.FocusedWindow)
+        if (s.OutputToWindow) TextInjector.Type(text + " ");
+        if (s.OutputToFile && !string.IsNullOrWhiteSpace(file))
         {
-            TextInjector.Type(text + " ");
-            return;
+            var dir = Path.GetDirectoryName(file);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            var line = s.TimestampInFile ? $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}" : text;
+            File.AppendAllText(file, line + Environment.NewLine);
         }
-        var dir = Path.GetDirectoryName(s.FilePath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        var line = s.TimestampInFile ? $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}" : text;
-        File.AppendAllText(s.FilePath, line + Environment.NewLine);
     }
 
     public void Dispose()

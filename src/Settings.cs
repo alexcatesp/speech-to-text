@@ -3,17 +3,16 @@ using Microsoft.Win32;
 
 namespace SpeechToText;
 
-public enum OutputMode { FocusedWindow, TextFile }
-
 public sealed class Settings
 {
     public string ServerUrl { get; set; } = "http://127.0.0.1:8000";
     public string ModelName { get; set; } = "";
     public string Language { get; set; } = "es";
     public string MicrophoneName { get; set; } = "";
-    public OutputMode Output { get; set; } = OutputMode.FocusedWindow;
+    public bool OutputToWindow { get; set; } = true;
+    public bool OutputToFile { get; set; }
     public string FilePath { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "transcripcion.txt");
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "transcripcion_{yyyy-MM-dd_HH-mm}.txt");
     public bool TimestampInFile { get; set; }
     public string Hotkey { get; set; } = "Ctrl+Alt+Space";
     public double ThresholdDb { get; set; } = -38;
@@ -65,6 +64,14 @@ public sealed class Settings
         }
         catch (Exception ex) { Log("Autoarranque: " + ex.Message); }
     }
+
+    /// <summary>Sustituye marcadores como {yyyy-MM-dd} por la fecha indicada (formatos de fecha de .NET).</summary>
+    public static string ResolvePath(string template, DateTime now) =>
+        System.Text.RegularExpressions.Regex.Replace(template, @"\{([^{}]+)\}", m =>
+        {
+            try { return now.ToString(m.Groups[1].Value); }
+            catch (FormatException) { return m.Value; }
+        });
 
     public static void Log(string msg)
     {
