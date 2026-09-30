@@ -1,0 +1,78 @@
+using System.Text.Json;
+using Microsoft.Win32;
+
+namespace SpeechToText;
+
+public enum OutputMode { FocusedWindow, TextFile }
+
+public sealed class Settings
+{
+    public string ServerUrl { get; set; } = "http://127.0.0.1:8000";
+    public string ModelName { get; set; } = "";
+    public string Language { get; set; } = "es";
+    public string MicrophoneName { get; set; } = "";
+    public OutputMode Output { get; set; } = OutputMode.FocusedWindow;
+    public string FilePath { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "transcripcion.txt");
+    public bool TimestampInFile { get; set; }
+    public string Hotkey { get; set; } = "Ctrl+Alt+Space";
+    public double ThresholdDb { get; set; } = -38;
+    public int SilenceMs { get; set; } = 700;
+    public int MaxSegmentSeconds { get; set; } = 25;
+    public bool StartWithWindows { get; set; } = true;
+
+    static readonly string Dir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SpeechToText");
+    public static string SettingsPath => Path.Combine(Dir, "settings.json");
+    public static string LogPath => Path.Combine(Dir, "log.txt");
+
+    static readonly JsonSerializerOptions Json = new()
+    {
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
+    public static Settings Load()
+    {
+        try
+        {
+            if (File.Exists(SettingsPath))
+                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsPath), Json) ?? new();
+        }
+        catch (Exception ex) { Log("No se pudo leer la configuración: " + ex.Message); }
+        var s = new Settings();
+        s.Save();
+        return s;
+    }
+
+    public void Save()
+    {
+        Directory.CreateDirectory(Dir);
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, Json));
+        ApplyAutostart();
+    }
+
+    void ApplyAutostart()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+            if (key == null) return;
+            if (StartWithWindows && Environment.ProcessPath is { } exe)
+                key.SetValue("SpeechToText", $"\"{exe}\"");
+            else
+                key.DeleteValue("SpeechToText", false);
+        }
+        catch (Exception ex) { Log("Autoarranque: " + ex.Message); }
+    }
+
+    public static void Log(string msg)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            File.AppendAllText(LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {msg}{Environment.NewLine}");
+        }
+        catch { }
+    }
+}
