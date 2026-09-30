@@ -8,7 +8,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>SpeechToText</AssemblyName>
     <RootNamespace>SpeechToText</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
+    <!-- Publicación portable: dotnet publish -c Release -r win-x64 -p:PublishPortable=true -->
+    <SelfContained Condition="'$(PublishPortable)' == 'true'">true</SelfContained>
+    <PublishSingleFile Condition="'$(PublishPortable)' == 'true'">true</PublishSingleFile>
+    <EnableCompressionInSingleFile Condition="'$(PublishPortable)' == 'true'">true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(PublishPortable)' == 'true'">true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

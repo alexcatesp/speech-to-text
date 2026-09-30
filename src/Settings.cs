@@ -18,10 +18,14 @@ public sealed class Settings
     public double ThresholdDb { get; set; } = -38;
     public int SilenceMs { get; set; } = 700;
     public int MaxSegmentSeconds { get; set; } = 25;
-    public bool StartWithWindows { get; set; } = true;
+    public bool StartWithWindows { get; set; } = !IsPortable;
 
-    static readonly string Dir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SpeechToText");
+    /// <summary>Modo portable: si existe portable.txt junto al exe, los datos se guardan en .\data.</summary>
+    public static readonly bool IsPortable = File.Exists(Path.Combine(AppContext.BaseDirectory, "portable.txt"));
+
+    static readonly string Dir = IsPortable
+        ? Path.Combine(AppContext.BaseDirectory, "data")
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SpeechToText");
     public static string SettingsPath => Path.Combine(Dir, "settings.json");
     public static string LogPath => Path.Combine(Dir, "log.txt");
 

@@ -27,6 +27,13 @@ dotnet publish -c Release -r win-x64 --self-contained false -o ../publish
 ```
 Ejecutable: `src\bin\Release\net8.0-windows\SpeechToText.exe`. El autoarranque registra la ruta del exe que se ejecute en `HKCU\...\Run`; ejecuta una vez el exe definitivo (p. ej. el de `publish`) para fijarla.
 
+## Versión portable
+Descarga `SpeechToText-portable.zip` de [Releases](https://github.com/alexcatesp/speech-to-text/releases), descomprime y ejecuta `SpeechToText.exe`. Es un único exe autocontenido (**no necesita instalar .NET**). Mientras exista `portable.txt` junto al exe, la configuración y el log se guardan en la carpeta `data\` de al lado, y el inicio con Windows viene desactivado (puedes activarlo en Configuración; registra la ruta actual del exe en el registro). Para generarla:
+```
+dotnet publish src -c Release -r win-x64 -p:PublishPortable=true -o publish/SpeechToText-portable
+```
+y añade un `portable.txt` a la carpeta resultante.
+
 ## Limitaciones
 - No puede teclear en ventanas ejecutadas como administrador (UIPI) salvo que la app también lo sea.
 - Requiere que el servidor Whisper esté en marcha.
