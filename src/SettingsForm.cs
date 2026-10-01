@@ -24,6 +24,8 @@ sealed class SettingsForm : Form
     readonly CheckBox stamp = new() { Text = "Añadir fecha y hora a cada frase", AutoSize = true };
     readonly Label preview = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(480, 0) };
     readonly NumericUpDown captionSize = new() { Minimum = 14, Maximum = 120 };
+    readonly NumericUpDown captionSilence = new() { Minimum = 150, Maximum = 1000, Increment = 50 };
+    readonly NumericUpDown sentencePause = new() { Minimum = 400, Maximum = 3000, Increment = 100 };
 
     // LLM
     readonly CheckBox useLlm = new() { Text = "Depurar cada fragmento con un LLM local (Ollama)", AutoSize = true };
@@ -71,18 +73,21 @@ sealed class SettingsForm : Form
         Wide(dest, stamp);
         Wide(dest, toCaptions);
         Row(dest, "Tamaño de letra (subtítulos)", captionSize);
+        Row(dest, "Silencio que corta fragmento (ms)", captionSilence);
         Wide(dest, new Label
         {
             AutoSize = true, MaximumSize = new Size(480, 0), ForeColor = SystemColors.GrayText,
-            Text = "Con subtítulos activos las frases se cortan antes (silencio ≤ 450 ms, fragmentos ≤ 8 s) para que el texto " +
-                   "aparezca cuanto antes. Los subtítulos nunca pasan por el LLM. En la ventana: Ctrl + / Ctrl - o Ctrl + rueda " +
-                   "para el tamaño de letra; clic derecho para tema y más."
+            Text = "Con subtítulos se usa este silencio (más corto = el texto aparece antes y casi palabra a palabra, " +
+                   "pero Whisper tiene menos contexto) en lugar del de la pestaña General; los fragmentos se acotan a 8 s. " +
+                   "Los subtítulos nunca pasan por el LLM. En la ventana: Ctrl + / Ctrl - o Ctrl + rueda para la letra; " +
+                   "clic derecho para tema y más."
         });
 
         // --- LLM
         Wide(llmPage, useLlm);
         Row(llmPage, "URL de Ollama", llmUrl, llmTest);
         Row(llmPage, "Modelo", llmModel);
+        Row(llmPage, "Pausa que cierra una frase (ms)", sentencePause);
         Wide(llmPage, new Label { Text = "Prompt de depuración:", AutoSize = true });
         Wide(llmPage, llmPrompt);
         Wide(llmPage, llmReset);
@@ -90,7 +95,9 @@ sealed class SettingsForm : Form
         Wide(llmPage, new Label
         {
             AutoSize = true, MaximumSize = new Size(480, 0), ForeColor = SystemColors.GrayText,
-            Text = "Añade ~0,6 s por frase (con el modelo ya cargado). Se aplica a ventana con foco, fichero y transcripción " +
+            Text = "Con LLM o subtítulos los fragmentos cortos se agrupan en frases completas (se cierran tras la pausa indicada) " +
+                   "antes de enviarlos al LLM, a la ventana con foco o al fichero. " +
+                   "Añade ~0,6 s por frase (con el modelo ya cargado). Se aplica a ventana con foco, fichero y transcripción " +
                    "de ficheros de audio. Si Ollama no responde, se escribe el texto sin depurar. Al iniciar el dictado se " +
                    "precarga el modelo (la primera carga puede tardar más de un minuto)."
         });
@@ -169,6 +176,8 @@ sealed class SettingsForm : Form
         toFocus.Checked = s.OutputToWindow; toFile.Checked = s.OutputToFile; toCaptions.Checked = s.OutputToCaptions;
         file.Text = s.FilePath; stamp.Checked = s.TimestampInFile;
         captionSize.Value = Math.Clamp(s.CaptionFontSize, 14, 120);
+        captionSilence.Value = Math.Clamp(s.CaptionSilenceMs, 150, 1000);
+        sentencePause.Value = Math.Clamp(s.SentencePauseMs, 400, 3000);
         useLlm.Checked = s.UseLlm; llmUrl.Text = s.LlmUrl; llmModel.Text = s.LlmModel; llmPrompt.Text = s.LlmPrompt;
         UpdateEnabled();
     }
@@ -176,7 +185,7 @@ sealed class SettingsForm : Form
     void UpdateEnabled()
     {
         file.Enabled = browse.Enabled = stamp.Enabled = toFile.Checked;
-        captionSize.Enabled = toCaptions.Checked;
+        captionSize.Enabled = captionSilence.Enabled = toCaptions.Checked;
         llmUrl.Enabled = llmModel.Enabled = llmPrompt.Enabled = llmTest.Enabled = llmReset.Enabled = useLlm.Checked;
         UpdatePreview();
     }
@@ -225,6 +234,7 @@ sealed class SettingsForm : Form
         s.OutputToWindow = toFocus.Checked; s.OutputToFile = toFile.Checked; s.OutputToCaptions = toCaptions.Checked;
         s.FilePath = file.Text.Trim(); s.TimestampInFile = stamp.Checked;
         s.CaptionFontSize = (int)captionSize.Value;
+        s.CaptionSilenceMs = (int)captionSilence.Value; s.SentencePauseMs = (int)sentencePause.Value;
         s.UseLlm = useLlm.Checked; s.LlmUrl = llmUrl.Text.Trim(); s.LlmModel = llmModel.Text.Trim(); s.LlmPrompt = llmPrompt.Text.Trim();
         return true;
     }

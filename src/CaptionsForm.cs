@@ -75,7 +75,21 @@ sealed class CaptionsForm : Form
         hint.Font = new Font("Segoe UI", 11f);
     }
 
-    /// <summary>Añade una frase; solo desplaza al final si el lector no se ha ido hacia arriba a releer.</summary>
+    DateTime lastAdd = DateTime.MinValue;
+
+    // Palabras que casi nunca abren una frase: si llegan tras una pausa corta, son continuación (se pone minúscula).
+    static readonly HashSet<string> Continuations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "el","la","los","las","un","una","unos","unas","de","del","al","a","en","con","por","para","sin","sobre","entre",
+        "que","y","e","o","u","pero","como","se","su","sus","lo","le","les","me","te","mi","tu","es","son","está","están",
+        "hay","más","muy","ya","no","donde","cuando","porque","si","este","esta","estos","estas","ese","esa","eso","esto"
+    };
+
+    /// <summary>
+    /// Añade un fragmento. Los fragmentos cortos que llegan seguidos se unen en el mismo párrafo (se quita el
+    /// punto final que Whisper pone al cortar); una pausa larga abre párrafo nuevo. Solo desplaza al final
+    /// si el lector no se ha ido hacia arriba a releer.
+    /// </summary>
     public void AddLine(string text)
     {
         bool follow = AtBottom();
@@ -84,7 +98,23 @@ sealed class CaptionsForm : Form
             box.Select(0, box.TextLength / 2);
             box.SelectedText = "";
         }
-        box.AppendText(text + "\n\n");
+        var now = DateTime.Now;
+        double gap = (now - lastAdd).TotalSeconds;
+        lastAdd = now;
+        if (box.TextLength == 0) box.AppendText(text);
+        else if (gap >= 2.0) box.AppendText("\n\n" + text);
+        else
+        {
+            if (gap < 1.0 && box.Text.EndsWith('.'))
+            {
+                box.Select(box.TextLength - 1, 1);
+                box.SelectedText = "";
+                var first = text.Split(' ', 2)[0].Trim(',', ';', ':');
+                if (text.Length > 1 && char.IsUpper(text[0]) && Continuations.Contains(first))
+                    text = char.ToLowerInvariant(text[0]) + text[1..];
+            }
+            box.AppendText(" " + text);
+        }
         if (follow) ScrollToEnd();
     }
 

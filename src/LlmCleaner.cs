@@ -31,9 +31,17 @@ sealed class LlmCleaner : IDisposable
         if (!resp.IsSuccessStatusCode) throw new HttpRequestException($"Ollama HTTP {(int)resp.StatusCode}: {json}");
         using var doc = JsonDocument.Parse(json);
         var clean = doc.RootElement.GetProperty("message").GetProperty("content").GetString()?.Trim() ?? "";
-        // Salvaguarda: si el modelo devuelve vacío o mucho más largo que la entrada, no es una depuración.
-        return clean.Length == 0 || clean.Length > text.Length * 1.3 + 20 ? text : clean;
+        // Salvaguardas: una depuración solo quita palabras. Si el modelo devuelve vacío, mucho más largo o
+        // con palabras que no estaban en la entrada (reescribe o inventa), se descarta y se usa el texto original.
+        if (clean.Length == 0 || clean.Length > text.Length * 1.3 + 20) return text;
+        var input = Words(text).ToHashSet();
+        var output = Words(clean).ToList();
+        int known = output.Count(input.Contains);
+        return output.Count > 0 && known < output.Count * 0.85 ? text : clean;
     }
+
+    static IEnumerable<string> Words(string t) =>
+        System.Text.RegularExpressions.Regex.Matches(t.ToLowerInvariant(), @"[\p{L}\p{N}]+").Select(m => m.Value);
 
     /// <summary>Carga el modelo en memoria (la primera carga puede tardar más de un minuto) y lo mantiene cargado.</summary>
     public async Task WarmUpAsync(Settings s)

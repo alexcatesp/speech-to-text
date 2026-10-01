@@ -12,9 +12,8 @@ sealed class Dictation : IDisposable
 {
     const int Rate = 16000;
     const int PreRollMs = 300;
-    const int MinVoicedMs = 250;
     // Con subtítulos activos se acortan los fragmentos para que el texto aparezca antes.
-    const int CaptionSilenceMs = 450, CaptionMaxSeconds = 8;
+    const int CaptionMaxSeconds = 8;
 
     public Transcriber Transcriber { get; } = new();
     public LlmCleaner Llm { get; } = new();
@@ -53,7 +52,8 @@ sealed class Dictation : IDisposable
         return list;
     }
 
-    int SilenceLimit => settings.OutputToCaptions ? Math.Min(settings.SilenceMs, CaptionSilenceMs) : settings.SilenceMs;
+    int SilenceLimit => settings.OutputToCaptions ? settings.CaptionSilenceMs : settings.SilenceMs;
+    int MinVoicedMs => settings.OutputToCaptions ? 150 : 250;
     int MaxMs => (settings.OutputToCaptions ? Math.Min(settings.MaxSegmentSeconds, CaptionMaxSeconds) : settings.MaxSegmentSeconds) * 1000;
 
     public void Start()
@@ -204,7 +204,7 @@ sealed class Dictation : IDisposable
             try
             {
                 var s = settings;
-                var text = await Transcriber.TranscribeAsync(s, wav);
+                var text = TrailingEllipsis.Replace(await Transcriber.TranscribeAsync(s, wav), "").Trim();
                 if (text.Length == 0) continue;
                 if (s.OutputToCaptions) Caption?.Invoke(text);
                 if (s.OutputToWindow || s.OutputToFile) textQueue?.Writer.TryWrite(text);
@@ -217,28 +217,63 @@ sealed class Dictation : IDisposable
         }
     }
 
-    // Etapa 2: depuración opcional con LLM y escritura en ventana/fichero.
+    // Whisper añade "..." al final de los fragmentos cortados a mitad de frase.
+    static readonly System.Text.RegularExpressions.Regex TrailingEllipsis = new(@"(\.\.\.|…)\s*$");
+
+    // Etapa 2: agrupa fragmentos en frases completas (si hay LLM o subtítulos, que generan fragmentos cortos),
+    // depura con LLM si procede y escribe en ventana/fichero.
     async Task OutputLoop(ChannelReader<string> reader)
     {
-        await foreach (var raw in reader.ReadAllAsync())
+        var pending = new List<string>();
+
+        async Task FlushAsync()
         {
-            var s = settings;
-            var text = raw;
-            if (s.UseLlm)
+            if (pending.Count == 0) return;
+            var text = string.Join(" ", pending);
+            pending.Clear();
+            await EmitAsync(settings, text);
+        }
+
+        while (true)
+        {
+            if (pending.Count == 0)
             {
-                try { text = await Llm.CleanAsync(s, raw); }
-                catch (Exception ex)
-                {
-                    Settings.Log("LLM: " + ex.Message);
-                    Error?.Invoke("LLM no disponible, se usa el texto sin depurar: " + ex.Message);
-                }
+                if (!await reader.WaitToReadAsync()) break;
             }
-            try { Output(s, SessionFile, text); }
+            else
+            {
+                using var cts = new CancellationTokenSource(settings.SentencePauseMs);
+                try { if (!await reader.WaitToReadAsync(cts.Token)) break; }
+                catch (OperationCanceledException) { await FlushAsync(); continue; }
+            }
+            while (reader.TryRead(out var raw))
+            {
+                var s = settings;
+                if (s.UseLlm || s.OutputToCaptions) pending.Add(raw);
+                else await EmitAsync(s, raw);
+            }
+            if (pending.Sum(p => p.Length) > 600) await FlushAsync();
+        }
+        await FlushAsync();
+    }
+
+    async Task EmitAsync(Settings s, string raw)
+    {
+        var text = raw;
+        if (s.UseLlm)
+        {
+            try { text = await Llm.CleanAsync(s, raw); }
             catch (Exception ex)
             {
-                Settings.Log("Salida: " + ex);
-                Error?.Invoke("Salida: " + ex.Message);
+                Settings.Log("LLM: " + ex.Message);
+                Error?.Invoke("LLM no disponible, se usa el texto sin depurar: " + ex.Message);
             }
+        }
+        try { Output(s, SessionFile, text); }
+        catch (Exception ex)
+        {
+            Settings.Log("Salida: " + ex);
+            Error?.Invoke("Salida: " + ex.Message);
         }
     }
 

@@ -14,6 +14,10 @@ public sealed class Settings
     public bool OutputToCaptions { get; set; }
 
     // Subtítulos en directo (ventana para el alumnado sordo)
+    /// <summary>Silencio que cierra un fragmento cuando hay subtítulos (fragmentos cortos = menos latencia).</summary>
+    public int CaptionSilenceMs { get; set; } = 300;
+    /// <summary>Pausa que cierra una frase antes de enviarla al LLM / ventana / fichero cuando se trabaja con fragmentos cortos.</summary>
+    public int SentencePauseMs { get; set; } = 1000;
     public int CaptionFontSize { get; set; } = 36;
     public bool CaptionDark { get; set; } = true;
     public bool CaptionTopMost { get; set; } = true;
