@@ -7,10 +7,30 @@ namespace SpeechToText;
 sealed class LlmCleaner : IDisposable
 {
     readonly HttpClient http = new() { Timeout = Timeout.InfiniteTimeSpan };
+    // Último modelo que se ha cargado/usado, para poder descargarlo aunque la configuración haya cambiado.
+    string? loadedUrl, loadedModel;
+
+    void Remember(Settings s) { loadedUrl = s.LlmUrl; loadedModel = s.LlmModel; }
+
+    /// <summary>Descarga de la GPU el modelo usado (keep_alive 0). No hace nada si nunca se ha usado el LLM.</summary>
+    public async Task UnloadAsync()
+    {
+        var (url, model) = (loadedUrl, loadedModel);
+        if (url == null || model == null) return;
+        loadedUrl = loadedModel = null;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var resp = await http.PostAsJsonAsync(url.TrimEnd('/') + "/api/generate",
+                new { model, keep_alive = 0 }, cts.Token);
+        }
+        catch (Exception ex) { Settings.Log("Descarga LLM: " + ex.Message); }
+    }
 
     /// <summary>Devuelve el texto depurado. Lanza excepción si Ollama no responde; el llamante usa el texto original.</summary>
     public async Task<string> CleanAsync(Settings s, string text, CancellationToken ct = default)
     {
+        Remember(s);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(30));
         var body = new
@@ -46,6 +66,7 @@ sealed class LlmCleaner : IDisposable
     /// <summary>Carga el modelo en memoria (la primera carga puede tardar más de un minuto) y lo mantiene cargado.</summary>
     public async Task WarmUpAsync(Settings s)
     {
+        Remember(s);
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));

@@ -30,6 +30,7 @@ sealed class SettingsForm : Form
     // LLM
     readonly CheckBox useLlm = new() { Text = "Depurar cada fragmento con un LLM local (Ollama)", AutoSize = true };
     readonly TextBox llmUrl = new(), llmModel = new(), llmPrompt = new() { Multiline = true, Height = 130, ScrollBars = ScrollBars.Vertical };
+    readonly CheckBox llmUnload = new() { Text = "Descargar el modelo de la GPU al parar el dictado (ahorra VRAM)", AutoSize = true };
     readonly Button llmTest = new() { Text = "Probar LLM", AutoSize = true };
     readonly Button llmReset = new() { Text = "Restaurar prompt", AutoSize = true };
     readonly Label llmStatus = new() { AutoSize = true, MaximumSize = new Size(480, 0) };
@@ -88,6 +89,7 @@ sealed class SettingsForm : Form
         Row(llmPage, "URL de Ollama", llmUrl, llmTest);
         Row(llmPage, "Modelo", llmModel);
         Row(llmPage, "Pausa que cierra una frase (ms)", sentencePause);
+        Wide(llmPage, llmUnload);
         Wide(llmPage, new Label { Text = "Prompt de depuración:", AutoSize = true });
         Wide(llmPage, llmPrompt);
         Wide(llmPage, llmReset);
@@ -99,7 +101,8 @@ sealed class SettingsForm : Form
                    "antes de enviarlos al LLM, a la ventana con foco o al fichero. " +
                    "Añade ~0,6 s por frase (con el modelo ya cargado). Se aplica a ventana con foco, fichero y transcripción " +
                    "de ficheros de audio. Si Ollama no responde, se escribe el texto sin depurar. Al iniciar el dictado se " +
-                   "precarga el modelo (la primera carga puede tardar más de un minuto)."
+                   "precarga el modelo (la primera carga puede tardar más de un minuto). Con esta opción desactivada " +
+                   "la app no contacta con Ollama ni carga ningún modelo en la GPU."
         });
 
         var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, AutoSize = true };
@@ -130,6 +133,8 @@ sealed class SettingsForm : Form
         toFile.CheckedChanged += (_, _) => UpdateEnabled();
         toCaptions.CheckedChanged += (_, _) => UpdateEnabled();
         useLlm.CheckedChanged += (_, _) => UpdateEnabled();
+        llmUrl.PlaceholderText = "Ej.: http://127.0.0.1:11434";
+        llmModel.PlaceholderText = "Ej.: gemma4-aula";
         file.TextChanged += (_, _) => UpdatePreview();
         FormClosing += (_, e) => { if (DialogResult == DialogResult.OK && !Apply()) e.Cancel = true; };
 
@@ -178,6 +183,7 @@ sealed class SettingsForm : Form
         captionSize.Value = Math.Clamp(s.CaptionFontSize, 14, 120);
         captionSilence.Value = Math.Clamp(s.CaptionSilenceMs, 150, 1000);
         sentencePause.Value = Math.Clamp(s.SentencePauseMs, 400, 3000);
+        llmUnload.Checked = s.LlmUnloadOnStop;
         useLlm.Checked = s.UseLlm; llmUrl.Text = s.LlmUrl; llmModel.Text = s.LlmModel; llmPrompt.Text = s.LlmPrompt;
         UpdateEnabled();
     }
@@ -186,7 +192,8 @@ sealed class SettingsForm : Form
     {
         file.Enabled = browse.Enabled = stamp.Enabled = toFile.Checked;
         captionSize.Enabled = captionSilence.Enabled = toCaptions.Checked;
-        llmUrl.Enabled = llmModel.Enabled = llmPrompt.Enabled = llmTest.Enabled = llmReset.Enabled = useLlm.Checked;
+        llmUrl.Enabled = llmModel.Enabled = llmPrompt.Enabled = llmTest.Enabled = llmReset.Enabled =
+            llmUnload.Enabled = useLlm.Checked;
         UpdatePreview();
     }
 
@@ -221,9 +228,9 @@ sealed class SettingsForm : Form
             MessageBox.Show(this, "Indica un fichero de salida.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        if (useLlm.Checked && (string.IsNullOrWhiteSpace(llmModel.Text) || string.IsNullOrWhiteSpace(llmPrompt.Text)))
+        if (useLlm.Checked && (string.IsNullOrWhiteSpace(llmUrl.Text) || string.IsNullOrWhiteSpace(llmModel.Text) || string.IsNullOrWhiteSpace(llmPrompt.Text)))
         {
-            MessageBox.Show(this, "Indica el modelo y el prompt del LLM.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Para usar el LLM indica la URL de Ollama, el modelo y el prompt.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
         s.ServerUrl = url.Text.Trim(); s.ModelName = model.Text.Trim(); s.Language = lang.Text.Trim();
@@ -235,6 +242,7 @@ sealed class SettingsForm : Form
         s.FilePath = file.Text.Trim(); s.TimestampInFile = stamp.Checked;
         s.CaptionFontSize = (int)captionSize.Value;
         s.CaptionSilenceMs = (int)captionSilence.Value; s.SentencePauseMs = (int)sentencePause.Value;
+        s.LlmUnloadOnStop = llmUnload.Checked;
         s.UseLlm = useLlm.Checked; s.LlmUrl = llmUrl.Text.Trim(); s.LlmModel = llmModel.Text.Trim(); s.LlmPrompt = llmPrompt.Text.Trim();
         return true;
     }

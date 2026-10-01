@@ -30,6 +30,7 @@ sealed class Dictation : IDisposable
     readonly List<double> segDb = new();
     int segmentMs, silenceMs, voicedMs;
     bool speaking;
+    DateTime llmDownUntil = DateTime.MinValue;
 
     public bool IsRunning => mic != null;
     /// <summary>Fichero de la sesión actual (o de la última), calculado al iniciar el dictado.</summary>
@@ -73,7 +74,8 @@ sealed class Dictation : IDisposable
         var reader2 = textQueue.Reader;
         worker = Task.Run(() => TranscribeLoop(reader));
         worker2 = Task.Run(() => OutputLoop(reader2));
-        if (settings.UseLlm && (settings.OutputToWindow || settings.OutputToFile))
+        llmDownUntil = DateTime.MinValue;
+        if (settings.LlmEnabled && (settings.OutputToWindow || settings.OutputToFile))
             _ = Llm.WarmUpAsync(settings);
         var m = new WaveInEvent { DeviceNumber = device, WaveFormat = format, BufferMilliseconds = 30 };
         m.DataAvailable += OnData;
@@ -82,7 +84,8 @@ sealed class Dictation : IDisposable
         mic = m;
     }
 
-    public async Task StopAsync()
+    /// <param name="releaseLlm">Descarga el modelo LLM de la GPU si está configurado (false al reiniciar por un cambio de ajustes).</param>
+    public async Task StopAsync(bool releaseLlm = true)
     {
         var m = mic;
         if (m == null) return;
@@ -95,6 +98,7 @@ sealed class Dictation : IDisposable
         if (worker != null) await worker;
         textQueue?.Writer.Complete();
         if (worker2 != null) await worker2;
+        if (releaseLlm && settings.LlmUnloadOnStop) await Llm.UnloadAsync();
         Speaking?.Invoke(false);
     }
 
@@ -249,7 +253,7 @@ sealed class Dictation : IDisposable
             while (reader.TryRead(out var raw))
             {
                 var s = settings;
-                if (s.UseLlm || s.OutputToCaptions) pending.Add(raw);
+                if (s.LlmEnabled || s.OutputToCaptions) pending.Add(raw);
                 else await EmitAsync(s, raw);
             }
             if (pending.Sum(p => p.Length) > 600) await FlushAsync();
@@ -260,11 +264,14 @@ sealed class Dictation : IDisposable
     async Task EmitAsync(Settings s, string raw)
     {
         var text = raw;
-        if (s.UseLlm)
+        // Si el endpoint falla, se usa el texto sin depurar y no se reintenta durante 60 s
+        // (evita esperas de 30 s por frase en un equipo donde Ollama no está levantado).
+        if (s.LlmEnabled && DateTime.Now >= llmDownUntil)
         {
             try { text = await Llm.CleanAsync(s, raw); }
             catch (Exception ex)
             {
+                llmDownUntil = DateTime.Now.AddSeconds(60);
                 Settings.Log("LLM: " + ex.Message);
                 Error?.Invoke("LLM no disponible, se usa el texto sin depurar: " + ex.Message);
             }

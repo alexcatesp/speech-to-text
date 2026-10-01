@@ -75,7 +75,7 @@ sealed class TrayApp : ApplicationContext
         var dest = string.Join("+", new[]
         {
             settings.OutputToWindow ? "ventana" : null, settings.OutputToFile ? "fichero" : null,
-            settings.OutputToCaptions ? "subtítulos" : null, settings.UseLlm ? "LLM" : null
+            settings.OutputToCaptions ? "subtítulos" : null, settings.LlmEnabled ? "LLM" : null
         }.Where(x => x != null));
         var text = (on ? "Dictado ACTIVO" : "Dictado parado") + $" · {settings.Hotkey} · {dest}";
         tray.Text = text.Length > 63 ? text[..63] : text; // límite de NotifyIcon.Text
@@ -114,7 +114,7 @@ sealed class TrayApp : ApplicationContext
                 settings.Save();
                 dictation.UpdateSettings(settings);
                 RegisterHotkey();
-                if (dictation.IsRunning) { dictation.StopAsync().GetAwaiter().GetResult(); dictation.Start(); }
+                if (dictation.IsRunning) { dictation.StopAsync(releaseLlm: !settings.LlmEnabled).GetAwaiter().GetResult(); dictation.Start(); }
                 Refresh();
             }
         }

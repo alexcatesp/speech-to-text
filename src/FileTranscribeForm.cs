@@ -27,7 +27,9 @@ sealed class FileTranscribeForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9f);
         AllowDrop = true;
-        llm.Checked = s.UseLlm;
+        // Solo disponible si hay endpoint y modelo configurados (no se supone que haya Ollama).
+        llm.Enabled = !string.IsNullOrWhiteSpace(s.LlmUrl) && !string.IsNullOrWhiteSpace(s.LlmModel);
+        llm.Checked = s.LlmEnabled;
 
         var top = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Padding = new Padding(8) };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -68,6 +70,8 @@ sealed class FileTranscribeForm : Form
             if (d.ShowDialog(this) == DialogResult.OK) File.WriteAllText(d.FileName, result.Text, new UTF8Encoding(true));
         };
         FormClosing += (_, _) => cts?.Cancel();
+        // Si el LLM se usó aquí y no hay dictado en curso, libera la VRAM.
+        FormClosed += (_, _) => { if (s.LlmUnloadOnStop && !engine.IsRunning) _ = engine.Llm.UnloadAsync(); };
     }
 
     bool busy;
