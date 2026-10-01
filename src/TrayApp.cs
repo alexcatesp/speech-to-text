@@ -15,16 +15,25 @@ sealed class TrayApp : ApplicationContext
     readonly SynchronizationContext ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
     DateTime lastError = DateTime.MinValue;
     bool settingsOpen;
+    CaptionsForm? captions;
+    FileTranscribeForm? fileForm;
 
     public TrayApp()
     {
         dictation = new Dictation(settings);
         dictation.Error += msg => ui.Post(_ => ShowError(msg), null);
-        dictation.Speaking += on => ui.Post(_ => { if (dictation.IsRunning) tray.Icon = on ? talking : active; }, null);
+        dictation.Speaking += on => ui.Post(_ =>
+        {
+            if (dictation.IsRunning) tray.Icon = on ? talking : active;
+            if (captions is { IsDisposed: false }) captions.SetListening(on);
+        }, null);
+        dictation.Caption += text => ui.Post(_ => ShowCaptions().AddLine(text), null);
 
         var menu = new ContextMenuStrip();
         toggleItem.Click += async (_, _) => await ToggleAsync();
         menu.Items.Add(toggleItem);
+        menu.Items.Add("Subtítulos en directo", null, (_, _) => ShowCaptions());
+        menu.Items.Add("Transcribir fichero de audio…", null, (_, _) => OpenFileTranscriber());
         menu.Items.Add("Configuración…", null, (_, _) => OpenSettings());
         menu.Items.Add("Abrir fichero de salida", null, (_, _) => OpenOutputFile());
         menu.Items.Add(new ToolStripSeparator());
@@ -48,7 +57,11 @@ sealed class TrayApp : ApplicationContext
         try
         {
             if (dictation.IsRunning) await dictation.StopAsync();
-            else dictation.Start();
+            else
+            {
+                dictation.Start();
+                if (settings.OutputToCaptions) ShowCaptions();
+            }
         }
         catch (Exception ex) { Settings.Log("Toggle: " + ex); ShowError(ex.Message); }
         Refresh();
@@ -59,8 +72,27 @@ sealed class TrayApp : ApplicationContext
         bool on = dictation.IsRunning;
         tray.Icon = on ? active : idle;
         toggleItem.Text = on ? "Parar dictado" : "Iniciar dictado";
-        var dest = string.Join(" + ", new[] { settings.OutputToWindow ? "ventana" : null, settings.OutputToFile ? "fichero" : null }.Where(x => x != null));
-        tray.Text = (on ? "Dictado ACTIVO" : "Dictado parado") + $" · {settings.Hotkey} · {dest}";
+        var dest = string.Join("+", new[]
+        {
+            settings.OutputToWindow ? "ventana" : null, settings.OutputToFile ? "fichero" : null,
+            settings.OutputToCaptions ? "subtítulos" : null, settings.UseLlm ? "LLM" : null
+        }.Where(x => x != null));
+        var text = (on ? "Dictado ACTIVO" : "Dictado parado") + $" · {settings.Hotkey} · {dest}";
+        tray.Text = text.Length > 63 ? text[..63] : text; // límite de NotifyIcon.Text
+    }
+
+    CaptionsForm ShowCaptions()
+    {
+        if (captions == null || captions.IsDisposed) captions = new CaptionsForm(settings);
+        if (!captions.Visible) captions.Show();
+        return captions;
+    }
+
+    void OpenFileTranscriber()
+    {
+        if (fileForm is { IsDisposed: false }) { fileForm.Activate(); return; }
+        fileForm = new FileTranscribeForm(settings, dictation);
+        fileForm.Show();
     }
 
     void ShowError(string msg)

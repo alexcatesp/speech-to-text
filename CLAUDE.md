@@ -16,4 +16,8 @@ App de bandeja de Windows (C# .NET 8 WinForms, NAudio.WinMM) para dictado con Wh
 - Compilar con `dotnet build -c Release` dentro de `src/` (el SDK está en `C:\Program Files\dotnet`; puede no estar en el PATH de la sesión).
 - Salida: `OutputToWindow` y `OutputToFile` son independientes (ambas posibles). `FilePath` es una plantilla; `Settings.ResolvePath` sustituye `{formato-fecha}` y `Dictation.Start` fija `SessionFile` (un fichero por sesión).
 - Portable: `Settings.IsPortable` (existe `portable.txt` junto al exe) → datos en `.\data` y autoarranque desactivado por defecto. Publicar con `-p:PublishPortable=true` (single-file, autocontenido, comprimido, ~68 MB) y subir el zip como Release de GitHub.
+- Pipeline en dos etapas (`Dictation`): etapa 1 Whisper → evento `Caption` (subtítulos, sin LLM); etapa 2 opcional LLM (`LlmCleaner`, Ollama `/api/chat`, `think:false`, fallback al texto bruto) → ventana/fichero. Con `OutputToCaptions` el VAD usa silencio ≤ 450 ms y máx. 8 s, y al llegar al máximo corta en el punto más silencioso de los últimos 2 s (`SplitAtQuietPoint`).
+- `CaptionsForm` (subtítulos, scroll automático salvo que el lector suba), `FileTranscribeForm` + `AudioFile` (Media Foundation vía paquete NAudio completo → PCM 16 kHz mono, troceado ≤ 28 s por silencios, umbral = ThresholdDb − 8).
+- Medidas (RTX 5070 Ti): Whisper ~0,5 s por 10 s de audio; gemma4-aula ~0,6 s/frase en caliente, ~85 s de carga en frío, 8,4 GB VRAM; servidor Whisper ~1,3 GB VRAM. Ollama debe estar en marcha (`ollama serve`; no se arranca solo).
+- Los equipos del aula no tienen permisos de administrador: nada de reglas de cortafuegos → subtítulos solo en ventana local (sin servidor web).
 - Mantener README.md y este fichero al día con cada cambio importante.

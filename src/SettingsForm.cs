@@ -5,19 +5,32 @@ sealed class SettingsForm : Form
     readonly Settings s;
     readonly Dictation dictation;
 
-    readonly TextBox url = new(), model = new(), file = new(), hotkey = new();
+    // General
+    readonly TextBox url = new(), model = new(), hotkey = new();
     readonly ComboBox lang = new() { DropDownStyle = ComboBoxStyle.DropDown };
     readonly ComboBox mic = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    readonly CheckBox toFocus = new() { Text = "Escribir en la ventana con foco (donde está el cursor)", AutoSize = true };
-    readonly CheckBox toFile = new() { Text = "Guardar en un fichero de texto", AutoSize = true };
-    readonly Label preview = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(440, 0) };
-    readonly CheckBox stamp = new() { Text = "Añadir fecha y hora a cada frase", AutoSize = true };
-    readonly CheckBox autostart = new() { Text = "Iniciar con Windows", AutoSize = true };
     readonly NumericUpDown threshold = new() { Minimum = -70, Maximum = -10, DecimalPlaces = 0 };
     readonly NumericUpDown silence = new() { Minimum = 300, Maximum = 3000, Increment = 100 };
-    readonly Button browse = new() { Text = "…", Width = 32 };
+    readonly CheckBox autostart = new() { Text = "Iniciar con Windows", AutoSize = true };
     readonly Button test = new() { Text = "Probar servidor", AutoSize = true };
-    readonly Label status = new() { AutoSize = true, MaximumSize = new Size(440, 0) };
+    readonly Label status = new() { AutoSize = true, MaximumSize = new Size(480, 0) };
+
+    // Destinos
+    readonly CheckBox toFocus = new() { Text = "Escribir en la ventana con foco (donde está el cursor)", AutoSize = true };
+    readonly CheckBox toFile = new() { Text = "Guardar en un fichero de texto", AutoSize = true };
+    readonly CheckBox toCaptions = new() { Text = "Mostrar subtítulos en directo en una ventana (accesibilidad)", AutoSize = true };
+    readonly TextBox file = new();
+    readonly Button browse = new() { Text = "…", Width = 32 };
+    readonly CheckBox stamp = new() { Text = "Añadir fecha y hora a cada frase", AutoSize = true };
+    readonly Label preview = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(480, 0) };
+    readonly NumericUpDown captionSize = new() { Minimum = 14, Maximum = 120 };
+
+    // LLM
+    readonly CheckBox useLlm = new() { Text = "Depurar cada fragmento con un LLM local (Ollama)", AutoSize = true };
+    readonly TextBox llmUrl = new(), llmModel = new(), llmPrompt = new() { Multiline = true, Height = 130, ScrollBars = ScrollBars.Vertical };
+    readonly Button llmTest = new() { Text = "Probar LLM", AutoSize = true };
+    readonly Button llmReset = new() { Text = "Restaurar prompt", AutoSize = true };
+    readonly Label llmStatus = new() { AutoSize = true, MaximumSize = new Size(480, 0) };
 
     public SettingsForm(Settings settings, Dictation dictation)
     {
@@ -30,51 +43,64 @@ sealed class SettingsForm : Form
         Font = new Font("Segoe UI", 9f);
         Padding = new Padding(12);
 
-        var t = new TableLayoutPanel { AutoSize = true, ColumnCount = 3, Dock = DockStyle.Fill };
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var tabs = new TabControl { Dock = DockStyle.Fill, Width = 600, Height = 440 };
+        var general = Page(tabs, "General");
+        var dest = Page(tabs, "Destinos");
+        var llmPage = Page(tabs, "Depuración (LLM)");
 
-        void Row(string label, Control c, Control? extra = null)
-        {
-            int r = t.RowCount++;
-            t.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 12, 3) }, 0, r);
-            c.Dock = DockStyle.Fill; c.Margin = new Padding(3, 5, 3, 3);
-            t.Controls.Add(c, 1, r);
-            if (extra != null) t.Controls.Add(extra, 2, r);
-        }
-        void Wide(Control c)
-        {
-            int r = t.RowCount++;
-            t.Controls.Add(c, 0, r); t.SetColumnSpan(c, 3); c.Margin = new Padding(3, 6, 3, 3);
-        }
-
-        Row("Servidor Whisper", url, test);
-        Row("Modelo (vacío = por defecto)", model);
+        // --- General
+        Row(general, "Servidor Whisper", url, test);
+        Row(general, "Modelo (vacío = por defecto)", model);
         lang.Items.AddRange(new object[] { "es", "en", "ca", "fr", "de", "it", "pt", "" });
-        Row("Idioma (vacío = autodetectar)", lang);
+        Row(general, "Idioma (vacío = autodetectar)", lang);
         mic.Items.Add("(Predeterminado de Windows)");
         foreach (var m in Dictation.Microphones()) mic.Items.Add(m);
-        Row("Micrófono", mic);
+        Row(general, "Micrófono", mic);
         hotkey.ReadOnly = true;
         hotkey.KeyDown += CaptureHotkey;
-        Row("Atajo iniciar/parar", hotkey);
-        Wide(toFocus); Wide(toFile);
-        Row("Fichero (plantilla)", file, browse);
-        Wide(preview);
-        Wide(stamp);
-        Row("Umbral de voz (dBFS)", threshold);
-        Row("Silencio que corta frase (ms)", silence);
-        Wide(autostart);
-        Wide(status);
+        Row(general, "Atajo iniciar/parar", hotkey);
+        Row(general, "Umbral de voz (dBFS)", threshold);
+        Row(general, "Silencio que corta frase (ms)", silence);
+        Wide(general, autostart);
+        Wide(general, status);
+
+        // --- Destinos
+        Wide(dest, toFocus); Wide(dest, toFile);
+        Row(dest, "Fichero (plantilla)", file, browse);
+        Wide(dest, preview);
+        Wide(dest, stamp);
+        Wide(dest, toCaptions);
+        Row(dest, "Tamaño de letra (subtítulos)", captionSize);
+        Wide(dest, new Label
+        {
+            AutoSize = true, MaximumSize = new Size(480, 0), ForeColor = SystemColors.GrayText,
+            Text = "Con subtítulos activos las frases se cortan antes (silencio ≤ 450 ms, fragmentos ≤ 8 s) para que el texto " +
+                   "aparezca cuanto antes. Los subtítulos nunca pasan por el LLM. En la ventana: Ctrl + / Ctrl - o Ctrl + rueda " +
+                   "para el tamaño de letra; clic derecho para tema y más."
+        });
+
+        // --- LLM
+        Wide(llmPage, useLlm);
+        Row(llmPage, "URL de Ollama", llmUrl, llmTest);
+        Row(llmPage, "Modelo", llmModel);
+        Wide(llmPage, new Label { Text = "Prompt de depuración:", AutoSize = true });
+        Wide(llmPage, llmPrompt);
+        Wide(llmPage, llmReset);
+        Wide(llmPage, llmStatus);
+        Wide(llmPage, new Label
+        {
+            AutoSize = true, MaximumSize = new Size(480, 0), ForeColor = SystemColors.GrayText,
+            Text = "Añade ~0,6 s por frase (con el modelo ya cargado). Se aplica a ventana con foco, fichero y transcripción " +
+                   "de ficheros de audio. Si Ollama no responde, se escribe el texto sin depurar. Al iniciar el dictado se " +
+                   "precarga el modelo (la primera carga puede tardar más de un minuto)."
+        });
 
         var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, AutoSize = true };
         var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, AutoSize = true };
-        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
+        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Bottom, AutoSize = true };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok);
-        Wide(buttons);
         AcceptButton = ok; CancelButton = cancel;
-        Controls.Add(t);
+        Controls.Add(tabs); Controls.Add(buttons);
 
         browse.Click += (_, _) =>
         {
@@ -87,11 +113,48 @@ sealed class SettingsForm : Form
             try { status.Text = "Conectado. Modelos: " + await dictation.CheckServerAsync(url.Text); }
             catch (Exception ex) { status.Text = "Error: " + ex.Message; }
         };
+        llmTest.Click += async (_, _) =>
+        {
+            llmStatus.Text = "Conectando…";
+            try { llmStatus.Text = await dictation.Llm.CheckAsync(llmUrl.Text, llmModel.Text.Trim()); }
+            catch (Exception ex) { llmStatus.Text = "Error: " + ex.Message; }
+        };
+        llmReset.Click += (_, _) => llmPrompt.Text = Settings.DefaultLlmPrompt;
         toFile.CheckedChanged += (_, _) => UpdateEnabled();
+        toCaptions.CheckedChanged += (_, _) => UpdateEnabled();
+        useLlm.CheckedChanged += (_, _) => UpdateEnabled();
         file.TextChanged += (_, _) => UpdatePreview();
         FormClosing += (_, e) => { if (DialogResult == DialogResult.OK && !Apply()) e.Cancel = true; };
 
         Load_();
+    }
+
+    static TableLayoutPanel Page(TabControl tabs, string title)
+    {
+        var page = new TabPage(title) { Padding = new Padding(8), AutoScroll = true };
+        var t = new TableLayoutPanel { AutoSize = true, ColumnCount = 3, Dock = DockStyle.Top };
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 290));
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        page.Controls.Add(t);
+        tabs.TabPages.Add(page);
+        return t;
+    }
+
+    static void Row(TableLayoutPanel t, string label, Control c, Control? extra = null)
+    {
+        int r = t.RowCount++;
+        t.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 12, 3) }, 0, r);
+        c.Dock = DockStyle.Fill; c.Margin = new Padding(3, 5, 3, 3);
+        t.Controls.Add(c, 1, r);
+        if (extra != null) t.Controls.Add(extra, 2, r);
+    }
+
+    static void Wide(TableLayoutPanel t, Control c)
+    {
+        int r = t.RowCount++;
+        t.Controls.Add(c, 0, r); t.SetColumnSpan(c, 3); c.Margin = new Padding(3, 6, 3, 3);
+        if (c is TextBox) c.Dock = DockStyle.Fill;
     }
 
     void Load_()
@@ -100,17 +163,21 @@ sealed class SettingsForm : Form
         int i = mic.Items.IndexOf(s.MicrophoneName);
         mic.SelectedIndex = i >= 0 ? i : 0;
         hotkey.Text = s.Hotkey;
-        toFocus.Checked = s.OutputToWindow; toFile.Checked = s.OutputToFile;
-        file.Text = s.FilePath; stamp.Checked = s.TimestampInFile;
         threshold.Value = (decimal)Math.Clamp(s.ThresholdDb, -70, -10);
         silence.Value = Math.Clamp(s.SilenceMs, 300, 3000);
         autostart.Checked = s.StartWithWindows;
+        toFocus.Checked = s.OutputToWindow; toFile.Checked = s.OutputToFile; toCaptions.Checked = s.OutputToCaptions;
+        file.Text = s.FilePath; stamp.Checked = s.TimestampInFile;
+        captionSize.Value = Math.Clamp(s.CaptionFontSize, 14, 120);
+        useLlm.Checked = s.UseLlm; llmUrl.Text = s.LlmUrl; llmModel.Text = s.LlmModel; llmPrompt.Text = s.LlmPrompt;
         UpdateEnabled();
     }
 
     void UpdateEnabled()
     {
         file.Enabled = browse.Enabled = stamp.Enabled = toFile.Checked;
+        captionSize.Enabled = toCaptions.Checked;
+        llmUrl.Enabled = llmModel.Enabled = llmPrompt.Enabled = llmTest.Enabled = llmReset.Enabled = useLlm.Checked;
         UpdatePreview();
     }
 
@@ -135,7 +202,7 @@ sealed class SettingsForm : Form
 
     bool Apply()
     {
-        if (!toFocus.Checked && !toFile.Checked)
+        if (!toFocus.Checked && !toFile.Checked && !toCaptions.Checked)
         {
             MessageBox.Show(this, "Elige al menos un destino.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
@@ -145,13 +212,20 @@ sealed class SettingsForm : Form
             MessageBox.Show(this, "Indica un fichero de salida.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
+        if (useLlm.Checked && (string.IsNullOrWhiteSpace(llmModel.Text) || string.IsNullOrWhiteSpace(llmPrompt.Text)))
+        {
+            MessageBox.Show(this, "Indica el modelo y el prompt del LLM.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
         s.ServerUrl = url.Text.Trim(); s.ModelName = model.Text.Trim(); s.Language = lang.Text.Trim();
         s.MicrophoneName = mic.SelectedIndex > 0 ? (string)mic.SelectedItem! : "";
         s.Hotkey = hotkey.Text;
-        s.OutputToWindow = toFocus.Checked; s.OutputToFile = toFile.Checked;
-        s.FilePath = file.Text.Trim(); s.TimestampInFile = stamp.Checked;
         s.ThresholdDb = (double)threshold.Value; s.SilenceMs = (int)silence.Value;
         s.StartWithWindows = autostart.Checked;
+        s.OutputToWindow = toFocus.Checked; s.OutputToFile = toFile.Checked; s.OutputToCaptions = toCaptions.Checked;
+        s.FilePath = file.Text.Trim(); s.TimestampInFile = stamp.Checked;
+        s.CaptionFontSize = (int)captionSize.Value;
+        s.UseLlm = useLlm.Checked; s.LlmUrl = llmUrl.Text.Trim(); s.LlmModel = llmModel.Text.Trim(); s.LlmPrompt = llmPrompt.Text.Trim();
         return true;
     }
 }
