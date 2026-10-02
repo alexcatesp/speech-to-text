@@ -42,11 +42,12 @@ sealed class SettingsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Font = new Font("Segoe UI", 9f);
+        AutoScaleMode = AutoScaleMode.Font;
         Padding = new Padding(12);
+        ClientSize = new Size(640, 560);
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Width = 600, Height = 440 };
+        var tabs = new TabControl { Dock = DockStyle.Fill };
         var general = Page(tabs, "General");
         var dest = Page(tabs, "Destinos");
         var llmPage = Page(tabs, "Depuración (LLM)");
@@ -107,7 +108,7 @@ sealed class SettingsForm : Form
 
         var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, AutoSize = true };
         var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, AutoSize = true };
-        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Bottom, AutoSize = true };
+        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok);
         AcceptButton = ok; CancelButton = cancel;
         Controls.Add(tabs); Controls.Add(buttons);
