@@ -267,7 +267,7 @@ sealed class Dictation : IDisposable
         var text = raw;
         // Si el endpoint falla, se usa el texto sin depurar y no se reintenta durante 60 s
         // (evita esperas de 30 s por frase en un equipo donde Ollama no está levantado).
-        if (s.LlmEnabled && DateTime.Now >= llmDownUntil)
+        if (s.LlmEnabled && !Llm.WarmingUp && DateTime.Now >= llmDownUntil)
         {
             try { text = await Llm.CleanAsync(s, raw); }
             catch (Exception ex)

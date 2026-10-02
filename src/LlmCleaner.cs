@@ -67,6 +67,7 @@ sealed class LlmCleaner : IDisposable
     public async Task WarmUpAsync(Settings s)
     {
         Remember(s);
+        WarmingUp = true;
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
@@ -74,7 +75,11 @@ sealed class LlmCleaner : IDisposable
                 new { model = s.LlmModel, keep_alive = s.LlmKeepAlive }, cts.Token);
         }
         catch (Exception ex) { Settings.Log("Precarga LLM: " + ex.Message); }
+        finally { WarmingUp = false; }
     }
+
+    /// <summary>True mientras el modelo se carga en frío; entonces el texto sale sin depurar en vez de esperar.</summary>
+    public volatile bool WarmingUp;
 
     public async Task<string> CheckAsync(string url, string model)
     {

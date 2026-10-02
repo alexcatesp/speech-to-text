@@ -25,3 +25,4 @@ App de bandeja de Windows (C# .NET 8 WinForms, NAudio.WinMM) para dictado con Wh
 - Los equipos del aula no tienen permisos de administrador: nada de reglas de cortafuegos → subtítulos solo en ventana local (sin servidor web).
 - Mantener README.md y este fichero al día con cada cambio importante.
 - Cierre robusto: `StopAsync` usa `ConfigureAwait(false)` (antes podía interbloquear el hilo de UI al reiniciar desde Configuración con `GetResult()`; ahora `TrayApp.RestartAsync`). `ExitAsync` espera como máximo 5 s a que pare el dictado y luego fuerza `Environment.Exit(0)` (una petición colgada a Whisper/Ollama ya no impide salir).
+- Con LLM, mientras Ollama carga el modelo en frío (`LlmCleaner.WarmingUp`, hasta ~85 s) el texto sale sin depurar en vez de esperar al timeout de 30 s por frase (antes parecía que "no transcribía").
