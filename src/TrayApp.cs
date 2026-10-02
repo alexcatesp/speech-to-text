@@ -114,7 +114,7 @@ sealed class TrayApp : ApplicationContext
                 settings.Save();
                 dictation.UpdateSettings(settings);
                 RegisterHotkey();
-                if (dictation.IsRunning) { dictation.StopAsync(releaseLlm: !settings.LlmEnabled).GetAwaiter().GetResult(); dictation.Start(); }
+                if (dictation.IsRunning) _ = RestartAsync();
                 Refresh();
             }
         }
@@ -130,13 +130,27 @@ sealed class TrayApp : ApplicationContext
             tray.ShowBalloonTip(3000, "Dictado por voz", "El fichero de salida todavía no existe.", ToolTipIcon.Info);
     }
 
+    // Reinicia el dictado tras cambiar ajustes sin bloquear el hilo de UI.
+    async Task RestartAsync()
+    {
+        try
+        {
+            await dictation.StopAsync(releaseLlm: !settings.LlmEnabled);
+            dictation.Start();
+        }
+        catch (Exception ex) { Settings.Log("Reinicio: " + ex); ShowError(ex.Message); }
+        Refresh();
+    }
+
     async Task ExitAsync()
     {
-        await dictation.StopAsync();
+        // Si una petición a Whisper/Ollama está colgada, no se espera más de 5 s para cerrar.
+        try { await Task.WhenAny(dictation.StopAsync(), Task.Delay(5000)); }
+        catch (Exception ex) { Settings.Log("Salir: " + ex); }
         tray.Visible = false;
         hotkey.Dispose();
-        dictation.Dispose();
         ExitThread();
+        Environment.Exit(0);
     }
 
     static Icon MakeIcon(Color c)

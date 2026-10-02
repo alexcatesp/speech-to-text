@@ -24,3 +24,4 @@ App de bandeja de Windows (C# .NET 8 WinForms, NAudio.WinMM) para dictado con Wh
 - Medidas (RTX 5070 Ti): Whisper ~0,5 s por 10 s de audio; gemma4-aula ~0,6 s/frase en caliente, ~85 s de carga en frío, 8,4 GB VRAM; servidor Whisper ~1,3 GB VRAM. Ollama debe estar en marcha (`ollama serve`; no se arranca solo).
 - Los equipos del aula no tienen permisos de administrador: nada de reglas de cortafuegos → subtítulos solo en ventana local (sin servidor web).
 - Mantener README.md y este fichero al día con cada cambio importante.
+- Cierre robusto: `StopAsync` usa `ConfigureAwait(false)` (antes podía interbloquear el hilo de UI al reiniciar desde Configuración con `GetResult()`; ahora `TrayApp.RestartAsync`). `ExitAsync` espera como máximo 5 s a que pare el dictado y luego fuerza `Environment.Exit(0)` (una petición colgada a Whisper/Ollama ya no impide salir).

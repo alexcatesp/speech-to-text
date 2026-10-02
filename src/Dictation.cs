@@ -95,10 +95,11 @@ sealed class Dictation : IDisposable
         m.Dispose();
         FlushSegment();
         queue?.Writer.Complete();
-        if (worker != null) await worker;
+        // ConfigureAwait(false): los llamantes pueden bloquear el hilo de UI esperando esta tarea.
+        if (worker != null) await worker.ConfigureAwait(false);
         textQueue?.Writer.Complete();
-        if (worker2 != null) await worker2;
-        if (releaseLlm && settings.LlmUnloadOnStop) await Llm.UnloadAsync();
+        if (worker2 != null) await worker2.ConfigureAwait(false);
+        if (releaseLlm && settings.LlmUnloadOnStop) await Llm.UnloadAsync().ConfigureAwait(false);
         Speaking?.Invoke(false);
     }
 
